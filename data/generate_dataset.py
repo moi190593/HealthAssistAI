@@ -13,7 +13,7 @@ LABEL_NAMES = {
     1: "Nivell 1 – Urgència",
     2: "Nivell 2 – Preferent",
     3: "Nivell 3 – Normal",
-    4: "Nivell 4 – Programat",
+    4: "Nivell 4 – Lleu",
 }
 
 GENERES = ["Home", "Dona", "Altres"]
@@ -22,7 +22,7 @@ GENERES = ["Home", "Dona", "Altres"]
 # Símptomes per nivell de triatge d'atenció primària
 # ---------------------------------------------------------------------------
 SIMPTOMES_PER_NIVELL = {
-    1: [  # Urgència — atenció < 2 hores
+    1: [ 
         "Febre alta amb mal estat general",
         "Dificultat respiratòria lleu",
         "Crisi asmàtica lleu",
@@ -40,7 +40,7 @@ SIMPTOMES_PER_NIVELL = {
         "Dolor ocular agut",
         "Crisi d'ansietat intensa",
     ],
-    2: [  # Preferent — atenció < 24 hores
+    2: [ 
         "Faringitis o amigdalitis aguda",
         "Otitis aguda",
         "Sinusitis aguda",
@@ -60,7 +60,7 @@ SIMPTOMES_PER_NIVELL = {
         "Molèsties urinàries lleus",
         "Picada d'insecte amb reacció local",
     ],
-    3: [  # Normal — atenció en 48–72 hores
+    3: [ 
         "Refredat comú",
         "Rinitis al·lèrgica",
         "Tos seca sense febre",
@@ -82,7 +82,7 @@ SIMPTOMES_PER_NIVELL = {
         "Ronquera lleu",
         "Dolor intermenstrual lleu",
     ],
-    4: [  # Programat — visita planificada (> 72 hores)
+    4: [ 
         "Renovació de recepta crònica",
         "Control de diabetis",
         "Control d'hipertensió arterial",
@@ -106,69 +106,61 @@ SIMPTOMES_PER_NIVELL = {
     ],
 }
 
-# Mapa símptoma → nivell de gravetat clínica (per a la feature Gravetat_simptoma)
-SIMPTOMA_A_NIVELL = {
-    simptoma: nivell
-    for nivell, simptomes in SIMPTOMES_PER_NIVELL.items()
-    for simptoma in simptomes
-}
-
 # Distribució objectiu: 10%, 20%, 30%, 40%
 TARGET_DIST = {1: 1000, 2: 2000, 3: 3000, 4: 4000}
 
 
 def generar_pacient(target_level):
     """Genera les constants vitals i el símptoma coherents amb el nivell objectiu."""
-    edat   = int(rng.integers(18, 86))  # Atenció primària: adults (18–85 anys)
+    edat   = int(rng.integers(15, 86))
     genere = rng.choice(GENERES)
-    pes    = round(float(rng.normal(72, 14)), 1)
-    pes    = max(40.0, min(180.0, pes))
-    altura = round(float(rng.normal(168, 10)), 1)
-    altura = max(150.0, min(200.0, altura))
-    imc    = round(pes / ((altura / 100) ** 2), 2)
 
     simptoma = rng.choice(SIMPTOMES_PER_NIVELL[target_level])
 
-    if target_level == 1:  # Urgència — constants alterades però no crítiques
-        fc   = int(rng.integers(100, 126))
-        temp = round(float(rng.uniform(39.5, 40.5)), 1)
-        ta_s = int(rng.choice([rng.integers(90, 101), rng.integers(155, 181)]))
-        ta_d = int(rng.choice([rng.integers(55, 66), rng.integers(100, 116)]))
-        spo2 = int(rng.integers(93, 97))
-        fr   = int(rng.integers(20, 27))
+    if target_level == 1:  # Urgència — constants crítiques (NEWS2 alt risc)
+        fc   = int(rng.choice([rng.integers(30, 55), rng.integers(121, 161)])) 
+        temp = round(float(rng.uniform(38.5, 41.0)), 1)
+        ta_s = int(rng.choice([rng.integers(70, 96), rng.integers(171, 211)])) 
+        ta_d = int(rng.choice([rng.integers(40, 62), rng.integers(110, 131)]))
+        spo2 = int(rng.integers(84, 94))                                   
+        fr   = int(rng.integers(24, 36))                                    
 
-    elif target_level == 2:  # Preferent — constants lleugerament alterades
-        fc   = int(rng.integers(85, 106))
-        temp = round(float(rng.uniform(38.0, 39.5)), 1)
-        ta_s = int(rng.integers(110, 156))
-        ta_d = int(rng.integers(65, 101))
-        spo2 = int(rng.integers(95, 99))
-        fr   = int(rng.integers(16, 21))
+    elif target_level == 2:  # Preferent — constants alterades (NEWS2 risc moderat)
+        fc   = int(rng.integers(96, 131))                                 
+        temp = round(float(rng.uniform(37.2, 39.0)), 1)                      
+        ta_s = int(rng.choice([rng.integers(88, 105), rng.integers(151, 181)]))
+        ta_d = int(rng.choice([rng.integers(53, 73), rng.integers(98, 115)]))
+        spo2 = int(rng.integers(91, 96))                            
+        fr   = int(rng.integers(19, 27))                                
 
-    elif target_level == 3:  # Normal — constants dins rang normal
-        fc   = int(rng.integers(65, 91))
-        temp = round(float(rng.uniform(37.0, 38.1)), 1)
-        ta_s = int(rng.integers(105, 141))
-        ta_d = int(rng.integers(60, 91))
-        spo2 = int(rng.integers(96, 100))
-        fr   = int(rng.integers(14, 19))
+    elif target_level == 3:  # Normal — constants lleugerament alterades
+        fc   = int(rng.integers(74, 102))                                
+        temp = round(float(rng.uniform(36.3, 37.8)), 1)                   
+        ta_s = int(rng.integers(98, 158))
+        ta_d = int(rng.integers(58, 98))
+        spo2 = int(rng.integers(93, 98))                                     
+        fr   = int(rng.integers(15, 22))                                     
 
-    else:  # 4 — Programat — constants completament normals
-        fc   = int(rng.integers(60, 86))
-        temp = round(float(rng.uniform(36.0, 37.5)), 1)
-        ta_s = int(rng.integers(100, 141))
-        ta_d = int(rng.integers(60, 91))
-        spo2 = int(rng.integers(97, 100))
-        fr   = int(rng.integers(12, 17))
+    else:  # 4 — Lleu — constants normals
+        fc   = int(rng.integers(53, 78))                                        
+        temp = round(float(rng.uniform(35.5, 36.8)), 1)                        
+        ta_s = int(rng.integers(98, 143))
+        ta_d = int(rng.integers(58, 93))
+        spo2 = int(rng.integers(96, 100))                                       
+        fr   = int(rng.integers(11, 17))                                     
+
+    # Soroll gaussià — variabilitat biològica i d'instrument
+    fc   = int(np.clip(fc   + rng.normal(0, 4),   25,  200))
+    temp = round(float(np.clip(temp + rng.normal(0, 0.3), 34.0, 42.5)), 1)
+    spo2 = int(np.clip(spo2 + rng.normal(0, 1.5), 70,  100))
+    fr   = int(np.clip(fr   + rng.normal(0, 2),    8,   50))
+    ta_s = int(np.clip(ta_s + rng.normal(0, 6),   50,  240))
+    ta_d = int(np.clip(ta_d + rng.normal(0, 4),   30,  140))
 
     return {
         "Edat": edat,
         "Gènere": genere,
-        "Pes": pes,
-        "Altura": altura,
-        "IMC": imc,
         "Simptomes principals": simptoma,
-        "Gravetat_simptoma": SIMPTOMA_A_NIVELL[simptoma],
         "Tensió arterial": f"{ta_s}/{ta_d}",
         "Freqüència cardíaca": fc,
         "Temperatura": temp,

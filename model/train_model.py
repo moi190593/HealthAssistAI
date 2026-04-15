@@ -40,8 +40,8 @@ df["TA_sistolica"]  = ta[0]
 df["TA_diastolica"] = ta[1]
 
 FEATURE_COLS = [
-    "Edat", "Gènere", "Pes", "Altura", "IMC",
-    "Simptomes principals", "Gravetat_simptoma",
+    "Edat", "Gènere",
+    "Simptomes principals",
     "TA_sistolica", "TA_diastolica",
     "Freqüència cardíaca", "Temperatura",
     "Saturació_oxigen", "Freqüència_respiratoria",
@@ -51,7 +51,7 @@ TARGET_COL = "Nivell de triatge"
 X = df[FEATURE_COLS]
 y = df[TARGET_COL]
 
-NUM_COLS = ["Edat", "Pes", "Altura", "IMC", "Gravetat_simptoma",
+NUM_COLS = ["Edat",
             "TA_sistolica", "TA_diastolica",
             "Freqüència cardíaca", "Temperatura",
             "Saturació_oxigen", "Freqüència_respiratoria"]
@@ -61,7 +61,7 @@ LABEL_NAMES = {
     1: "Urgència (Nivell 1)",
     2: "Preferent (Nivell 2)",
     3: "Normal (Nivell 3)",
-    4: "Programat (Nivell 4)",
+    4: "Lleu (Nivell 4)",
 }
 
 X_train, X_test, y_train, y_test = train_test_split(
@@ -270,14 +270,22 @@ best_params_dict = {
 joblib.dump(best_params_dict, "model/pkl/best_params.pkl")
 
 # Metadades per a la UI
+# Mapa símptoma → nivell (per ordenar la llista a la UI)
+simptoma_a_nivell = {
+    simptoma: nivell
+    for nivell, simptomes in {
+        1: df[df["Nivell de triatge"] == 1]["Simptomes principals"].unique().tolist(),
+        2: df[df["Nivell de triatge"] == 2]["Simptomes principals"].unique().tolist(),
+        3: df[df["Nivell de triatge"] == 3]["Simptomes principals"].unique().tolist(),
+        4: df[df["Nivell de triatge"] == 4]["Simptomes principals"].unique().tolist(),
+    }.items()
+    for simptoma in simptomes
+}
 meta = {
-    "genere_options":   sorted(df["Gènere"].unique().tolist()),
+    "genere_options":    sorted(df["Gènere"].unique().tolist()),
     "simptomes_options": sorted(df["Simptomes principals"].unique().tolist()),
-    "simptomes_nivell1": sorted(df[df["Nivell de triatge"] == 1]["Simptomes principals"].unique().tolist()),
-    "simptoma_a_nivell": df.set_index("Simptomes principals")["Gravetat_simptoma"].to_dict(),
+    "simptoma_a_nivell": simptoma_a_nivell,
     "edat_range":  (int(df["Edat"].min()),   int(df["Edat"].max())),
-    "pes_range":   (float(df["Pes"].min()),  float(df["Pes"].max())),
-    "altura_range":(float(df["Altura"].min()),float(df["Altura"].max())),
     "fc_range":    (int(df["Freqüència cardíaca"].min()), int(df["Freqüència cardíaca"].max())),
     "temp_range":  (float(df["Temperatura"].min()), float(df["Temperatura"].max())),
     "ta_sis_range":(float(df["TA_sistolica"].min()), float(df["TA_sistolica"].max())),

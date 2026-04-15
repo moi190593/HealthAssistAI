@@ -2,7 +2,7 @@
 # HealthAssistAI — EDA Pre-entrenament
 # Objectiu: explorar i validar el dataset ABANS d'entrenar el model.
 # Cobreix: càrrega, inspecció, nuls, únics, distribucions, correlacions,
-#          scatter plots, equilibri de categories, outliers i vectorització.
+#          scatter plots, equilibri de categories, outliers i preprocessament de features.
 # =============================================================================
 
 import os
@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler, OrdinalEncoder
 from sklearn.compose import ColumnTransformer
 
 # Carpeta on es guarden els gràfics
-IMAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
+IMAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images_pre")
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
 # =============================================================================
@@ -34,14 +34,14 @@ print(df)
 # Informació del dataset
 df.info()
 
-# --- Selecció de característiques ---
-df = df.drop('ID', axis=1)
+# Selecció de característiques 
+df = df.drop(['ID'], axis=1)
 df.info()
 
-# --- Nuls ---
+# Nuls
 print(df.isnull().sum())
 
-# --- Únics ---
+# Únics
 for col in df.select_dtypes(include='object').columns:
     print(f"{col}: {df[col].unique()}")
 
@@ -57,7 +57,7 @@ map_triage = {
     'Nivell 1 – Urgència':   1,
     'Nivell 2 – Preferent':  2,
     'Nivell 3 – Normal':     3,
-    'Nivell 4 – Programat':  4,
+    'Nivell 4 – Lleu':       4,
 }
 df['Nivell de triatge'] = df['Descripció triatge'].map(map_triage)
 df = df.drop(columns=['Descripció triatge'])
@@ -76,17 +76,17 @@ ax.set_title('Distribució de les prioritats de visita (AP)')
 ax.set_xlabel('Nivell de triatge')
 ax.set_ylabel('Nombre de pacients')
 ax.set_xticklabels(
-    ['N1 Urgència', 'N2 Preferent', 'N3 Normal', 'N4 Programat'],
+    ['N1 Urgència', 'N2 Preferent', 'N3 Normal', 'N4 Lleu'],
     rotation=20, ha='right'
 )
 plt.tight_layout()
 plt.savefig(os.path.join(IMAGES_DIR, "distribucio_nivells.png"), dpi=150, bbox_inches='tight')
 plt.close()
 
-# --- Duplicats ---
+# Duplicats
 print("Files duplicades:", df.duplicated().sum())
 
-# --- Distribucions ---
+# Distribucions
 num_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
 num_cols_per_row = 3
 num_rows = (len(num_cols) + num_cols_per_row - 1) // num_cols_per_row
@@ -107,7 +107,7 @@ plt.tight_layout()
 plt.savefig(os.path.join(IMAGES_DIR, "distribucions_histogrames.png"), dpi=150, bbox_inches='tight')
 plt.close()
 
-# --- Correlacions ---
+# Correlacions
 df_numericas = df.select_dtypes(include=["float64", "int64"])
 correlation_matrix = df_numericas.corr()
 
@@ -118,11 +118,12 @@ plt.savefig(os.path.join(IMAGES_DIR, "correlacio.png"), dpi=150, bbox_inches='ti
 plt.close()
 
 # Variables numèriques vs variable objectiu
-numeric_features = ['Edat', 'Pes', 'Altura', 'IMC', 'TA_sistolica', 'TA_diastolica',
-                    'Freqüència cardíaca', 'Temperatura']
+numeric_features = ['Edat', 'TA_sistolica', 'TA_diastolica',
+                    'Freqüència cardíaca', 'Temperatura',
+                    'Saturació_oxigen', 'Freqüència_respiratoria']
 target = 'Nivell de triatge'
 
-plt.figure(figsize=(20, 18))
+plt.figure(figsize=(20, 16))
 for i, feature in enumerate(numeric_features):
     plt.subplot(4, 2, i + 1)
     sns.scatterplot(data=df, x=feature, y=target, alpha=0.3,
@@ -136,14 +137,17 @@ plt.tight_layout()
 plt.savefig(os.path.join(IMAGES_DIR, "scatter_numeriques.png"), dpi=150, bbox_inches='tight')
 plt.close()
 
-# --- Equilibri de categories ---
+# Equilibri de categories
 fig, axes = plt.subplots(1, 2, figsize=(16, 5))
 
-df['Gènere'].value_counts().plot(kind='bar', ax=axes[0], color='steelblue', edgecolor='white')
-axes[0].set_title('Distribució de Gènere')
-axes[0].set_xlabel('Gènere')
-axes[0].set_ylabel('Freqüència')
-axes[0].tick_params(axis='x', rotation=0)
+df.groupby('Nivell de triatge')['Freqüència cardíaca'].mean().plot(
+    kind='bar', ax=axes[0],
+    color=['#c0392b', '#e67e22', '#2980b9', '#27ae60'], edgecolor='white'
+)
+axes[0].set_title('Freqüència cardíaca mitjana per nivell')
+axes[0].set_xlabel('Nivell de triatge')
+axes[0].set_ylabel('FC mitjana (bpm)')
+axes[0].set_xticklabels(['N1', 'N2', 'N3', 'N4'], rotation=0)
 
 df['Simptomes principals'].value_counts().sort_values().plot(
     kind='barh', ax=axes[1], color='salmon', edgecolor='white'
@@ -155,7 +159,9 @@ plt.tight_layout()
 plt.savefig(os.path.join(IMAGES_DIR, "equilibri_categories.png"), dpi=150, bbox_inches='tight')
 plt.close()
 
-# --- Outliers ---
+# Outliers
+# Nota: els outliers NO s'eliminen. En context clínic poden ser valors reals i rellevants.
+
 num_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
 num_cols_per_row = 3
 num_rows = (len(num_cols) + num_cols_per_row - 1) // num_cols_per_row
@@ -181,14 +187,12 @@ IQR = Q3 - Q1
 outliers = ((df[num_cols] < (Q1 - 1.5 * IQR)) | (df[num_cols] > (Q3 + 1.5 * IQR))).sum()
 print("Nombre d'outliers per columna:")
 print(outliers)
-# Nota: els outliers NO s'eliminen. En context clínic poden ser valors reals i rellevants.
 
 # =============================================================================
-# Vectorització
-# (s'usa el dataset complet sense eliminar outliers, igual que train_model.py)
+# Preprocessament de features
 # =============================================================================
 
-NUM_COLS = ['Edat', 'Pes', 'Altura', 'IMC', 'Gravetat_simptoma',
+NUM_COLS = ['Edat',
             'TA_sistolica', 'TA_diastolica',
             'Freqüència cardíaca', 'Temperatura',
             'Saturació_oxigen', 'Freqüència_respiratoria']
@@ -199,7 +203,7 @@ preprocessor = ColumnTransformer([
     ("cat", OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1), CAT_COLS),
 ])
 
-# Reload del dataset original per al split (sense outliers eliminats, = train_model.py)
+# Reload del dataset original per al split
 df_full = pd.read_csv(ruta)
 ta_full = df_full['Tensió arterial'].str.split('/', expand=True).astype(float)
 df_full['TA_sistolica']  = ta_full[0]

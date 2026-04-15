@@ -14,8 +14,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, ConfusionMatrixDisplay
 
 # Carpeta on es guarden els gràfics
-IMAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images")
+IMAGES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images_post")
 os.makedirs(IMAGES_DIR, exist_ok=True)
+
+# Carpeta on es guarda el classification report
+REPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "classification_report")
+os.makedirs(REPORT_DIR, exist_ok=True)
 
 MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "model", "pkl", "triage_model.pkl")
 
@@ -37,7 +41,7 @@ df['TA_sistolica']  = ta[0]
 df['TA_diastolica'] = ta[1]
 df = df.drop(columns=['Tensió arterial'])
 
-NUM_COLS = ['Edat', 'Pes', 'Altura', 'IMC', 'Gravetat_simptoma',
+NUM_COLS = ['Edat',
             'TA_sistolica', 'TA_diastolica',
             'Freqüència cardíaca', 'Temperatura',
             'Saturació_oxigen', 'Freqüència_respiratoria']
@@ -65,16 +69,29 @@ print(f"Conjunt de test: {X_test.shape[0]} registres\n")
 
 y_pred = model.predict(X_test)
 
-TARGET_NAMES = ["N1 Urgència", "N2 Preferent", "N3 Normal", "N4 Programat"]
+TARGET_NAMES = ["N1 Urgència", "N2 Preferent", "N3 Normal", "N4 Lleu"]
 
 print("=== Classification Report ===")
-print(classification_report(y_test, y_pred, target_names=TARGET_NAMES))
+report_str = classification_report(y_test, y_pred, target_names=TARGET_NAMES)
+print(report_str)
+
+# Guardar com a text
+with open(os.path.join(REPORT_DIR, "classification_report.txt"), "w", encoding="utf-8") as f:
+    f.write(f"Model: {best_name}\n")
+    f.write(f"Conjunt de test: {X_test.shape[0]} registres\n\n")
+    f.write(report_str)
+
+# Guardar com a CSV
+report_dict = classification_report(y_test, y_pred, target_names=TARGET_NAMES, output_dict=True)
+pd.DataFrame(report_dict).T.to_csv(os.path.join(REPORT_DIR, "classification_report.csv"), float_format="%.4f")
+
+print(f"Report guardat a eda/classification_report/")
 
 # --- Matriu de confusió ---
 fig, ax = plt.subplots(figsize=(8, 6))
 ConfusionMatrixDisplay.from_predictions(
     y_test, y_pred,
-    display_labels=["N1\nUrgència", "N2\nPreferent", "N3\nNormal", "N4\nProgramat"],
+    display_labels=["N1\nUrgència", "N2\nPreferent", "N3\nNormal", "N4\nLleu"],
     cmap="Blues", ax=ax, colorbar=False
 )
 plt.title(f"Matriu de confusió — {best_name}")
@@ -84,6 +101,8 @@ plt.close()
 
 # --- Importància de les features (si el model ho suporta) ---
 clf = model.named_steps["clf"]
+importancia_path = os.path.join(IMAGES_DIR, "importancia_features.png")
+
 if hasattr(clf, "feature_importances_"):
     importances = pd.Series(clf.feature_importances_, index=FEATURE_COLS).sort_values()
     colors = ['#c0392b' if imp > 0.15 else 'steelblue' for imp in importances]
@@ -95,7 +114,11 @@ if hasattr(clf, "feature_importances_"):
                 label=f'Mitjana ({importances.mean():.3f})')
     plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(IMAGES_DIR, "importancia_features.png"), dpi=150, bbox_inches='tight')
+    plt.savefig(importancia_path, dpi=150, bbox_inches='tight')
     plt.close()
+    print(f"Gràfic d'importància guardat.")
 else:
-    print(f"[Info] {best_name} no exposa feature_importances_; gràfic d'importància omès.")
+    # Eliminar imatge antiga si existeix per evitar mostrar dades d'un model diferent
+    if os.path.exists(importancia_path):
+        os.remove(importancia_path)
+    print(f"[Info] {best_name} no exposa feature_importances_; gràfic d'importància no disponible.")

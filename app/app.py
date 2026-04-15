@@ -30,17 +30,17 @@ st.set_page_config(
 
 # --- Configuració visual per nivell ---
 LEVEL_CONFIG = {
-    1: {"color": "#c0392b", "bg": "#fdecea", "icon": "🔴", "wait": "< 2 hores"},
-    2: {"color": "#e67e22", "bg": "#fef5e7", "icon": "🕿️", "wait": "Avui (< 24 h)"},
-    3: {"color": "#2980b9", "bg": "#eaf4fb", "icon": "🔵", "wait": "En 48–72 hores"},
-    4: {"color": "#27ae60", "bg": "#eafaf1", "icon": "🟢", "wait": "Visita programada"},
+    1: {"color": "#c0392b", "bg": "#fdecea", "icon": "🔴", "wait": "Atenció immediata (< 15 min)"},
+    2: {"color": "#e67e22", "bg": "#fef5e7", "icon": "🟠", "wait": "Atenció urgent (< 30 min)"},
+    3: {"color": "#2980b9", "bg": "#eaf4fb", "icon": "🔵", "wait": "Atenció preferent (< 60 min)"},
+    4: {"color": "#27ae60", "bg": "#eafaf1", "icon": "🟢", "wait": "Atenció no urgent (> 60 min)"},
 }
 
 RECOMMENDATIONS = {
-    1: "Consulteu el metge del CAP avui de forma urgent (o truqueu al 061 si empitjora).",
-    2: "Sol·liciteu visita per avui o demà al vostre CAP.",
-    3: "Podeu demanar cita en els pròxims 2–3 dies.",
-    4: "Sol·liciteu cita programada al vostre centre de salut.",
+    1: "Assignar a box de crítics. Derivar a atenció hospitalària via SEM. Monitoratge continu.",
+    2: "Assignar box d'exploració. Avaluació mèdica en menys de 30 minuts.",
+    3: "Ubicar a sala d'espera assistida. Reavaluar si canvi clínic.",
+    4: "Orientar a consulta d'atenció primària o zona d'espera general.",
 }
 
 # --- Carregar model ---
@@ -57,7 +57,7 @@ model, label_names, meta = load_artifacts()
 
 # --- Capçalera ---
 st.title("🏥 HealthAssist AI")
-st.subheader("Sistema de suport al triatge d'atenció primària (CAP)")
+st.subheader("Sistema de suport al triatge d'atenció primària en adults (CAP)")
 st.divider()
 
 if model is None:
@@ -67,41 +67,26 @@ if model is None:
     )
     st.stop()
 
-# ============================================================
 # PESTANYES
-# ============================================================
 tab_pred, tab_cmp = st.tabs(["🔍 Predicció", "📊 Comparació de models"])
 
-# ============================================================
+
 # PESTANYA 1 — PREDICCIÓ
-# ============================================================
 with tab_pred:
     st.markdown("Introdueix les dades clíniques del pacient per obtenir el **nivell de triatge**.")
 
     st.markdown("#### Dades del pacient")
     col1, col2, col3 = st.columns(3)
     with col1:
-        edat = st.number_input("Edat (anys)", min_value=0, max_value=120, value=35)
+        edat = st.number_input("Edat (anys)", min_value=15, max_value=120, value=35)
     with col2:
         genere = st.selectbox("Gènere", options=meta["genere_options"])
     with col3:
-        # Només símptomes de N1–N3: un pacient que ve a urgències del CAP
-        # mai ho fa per una visita programada (N4 = administratiu/seguiment).
-        simptomes_urgencies = [
-            s for s in meta["simptomes_options"]
-            if meta.get("simptoma_a_nivell", {}).get(s, 0) < 4
-        ]
-        simptoma = st.selectbox("Símptoma principal", options=simptomes_urgencies)
-
-    st.markdown("#### Mesures antropomètriques")
-    col4, col5, col6 = st.columns(3)
-    with col4:
-        pes = st.number_input("Pes (kg)", min_value=1.0, max_value=300.0, value=70.0, step=0.5)
-    with col5:
-        altura = st.number_input("Altura (cm)", min_value=50.0, max_value=250.0, value=170.0, step=0.5)
-    with col6:
-        imc = round(pes / ((altura / 100) ** 2), 2)
-        st.metric("IMC calculat", f"{imc:.1f}")
+        simptomes_ordenats = sorted(
+            meta["simptomes_options"],
+            key=lambda s: meta.get("simptoma_a_nivell", {}).get(s, 99)
+        )
+        simptoma = st.selectbox("Símptoma principal", options=simptomes_ordenats)
 
     st.markdown("#### Constants vitals")
     col7, col8, col9, col10 = st.columns(4)
@@ -123,15 +108,10 @@ with tab_pred:
     submitted = st.button("🔍 Predir nivell de triatge", use_container_width=True, type="primary")
 
     if submitted:
-        gravetat_simptoma = meta.get("simptoma_a_nivell", {}).get(simptoma, 3)
         input_df = pd.DataFrame([{
             "Edat": edat,
             "Gènere": genere,
-            "Pes": pes,
-            "Altura": altura,
-            "IMC": imc,
             "Simptomes principals": simptoma,
-            "Gravetat_simptoma": gravetat_simptoma,
             "TA_sistolica": float(ta_sis),
             "TA_diastolica": float(ta_dia),
             "Freqüència cardíaca": fc,
@@ -145,24 +125,10 @@ with tab_pred:
         predicted_level = int(classes[np.argmax(proba)])
         confidence = proba.max() * 100
 
-        # Override clínic: un símptoma de Nivell 1 implica risc vital immediat
-        # independentment de les constants vitals registrades.
-        simptomes_n1 = meta.get("simptomes_nivell1", [])
-        clinical_override = simptoma in simptomes_n1
-        if clinical_override:
-            predicted_level = 1
-
         cfg = LEVEL_CONFIG[predicted_level]
 
         st.divider()
         st.markdown("### Resultat de la classificació")
-
-        if clinical_override:
-            st.warning(
-                "⚠️ **Classificació per regla clínica:** el símptoma seleccionat "
-                "requereix atenció urgent. S'assigna **Nivell 1 – Urgència** "
-                "per a visita mèdica dins de les 2 hores."
-            )
 
         st.markdown(
             f"""
@@ -187,8 +153,7 @@ with tab_pred:
             unsafe_allow_html=True,
         )
 
-        if not clinical_override:
-            st.metric("Confiança del model", f"{confidence:.1f}%")
+        st.metric("Confiança del model", f"{confidence:.1f}%")
 
         with st.expander("📊 Distribució de probabilitats per nivell"):
             prob_df = pd.DataFrame({
@@ -211,13 +176,13 @@ with tab_pred:
                 f"{RECOMMENDATIONS[level]}"
             )
 
-# ============================================================
+#
 # PESTANYA 2 — COMPARACIÓ DE MODELS
-# ============================================================
+#
 with tab_cmp:
     st.markdown("### Comparació de models de classificació")
     st.markdown(
-        "S'han entrenat **5 models** amb validació creuada de 5 particions (5-fold CV). "
+        "S'han entrenat **5 models** amb validació creuada de 3 particions (3-fold CV). "
         "El criteri de selecció principal és el **F1 macro**, que penalitza els errors "
         "en classes minoritàries (nivells crítics)."
     )
